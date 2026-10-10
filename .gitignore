@@ -1,0 +1,7 @@
+/ccore-ipv6
+/ccore-ipv6.exe
+/dist-ccore-ipv6-linux-*
+/dist/
+/state.json
+/state.json.lock
+/.playwright-cli/

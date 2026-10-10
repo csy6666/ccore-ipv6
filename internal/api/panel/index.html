@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f7f8">
+  <title>ccore-ipv6 | IPv6 地址池</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ccore-ipv6 首页">
+      <span class="brand-mark">6</span>
+      <span><strong>ccore-ipv6</strong><small>地址池管理</small></span>
+    </a>
+    <div class="topbar-actions">
+      <span class="connection"><i></i>本机管理通道</span>
+      <button class="button button-quiet" id="refresh" type="button">刷新</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">NETWORK / IPV6</p>
+        <h1>IPv6 地址池</h1>
+        <p class="subtitle">查看接口地址，管理持久化地址。</p>
+      </div>
+      <span class="updated" id="updated">等待连接</span>
+    </section>
+
+    <section class="summary" aria-label="概览">
+      <div class="metric"><span>托管地址</span><strong id="managed-count">--</strong></div>
+      <div class="metric"><span>全局 IPv6</span><strong id="global-count">--</strong></div>
+      <div class="metric"><span>默认路由</span><strong id="route-count">--</strong></div>
+    </section>
+
+    <section class="workspace">
+      <div class="form-panel">
+        <div class="section-title">
+          <div><p class="eyebrow">ADDRESS POOL</p><h2>添加地址</h2></div>
+        </div>
+        <form id="add-form">
+          <label for="interface">网络接口</label>
+          <select id="interface" name="interface" required></select>
+
+          <label for="prefix">IPv6 前缀</label>
+          <input id="prefix" name="prefix" type="text" inputmode="url" placeholder="2001:db8:1::/64" required autocomplete="off" spellcheck="false">
+          <p class="field-hint" id="prefix-hint">选择接口后将填入其全局前缀。</p>
+
+          <label for="count">生成数量</label>
+          <div class="count-row">
+            <input id="count" name="count" type="number" min="1" max="64" value="4" required>
+            <span>个随机地址</span>
+          </div>
+          <button class="button button-primary add-button" id="add-submit" type="submit">生成并添加</button>
+        </form>
+        <div class="notice" id="notice" role="status" aria-live="polite"></div>
+        <div class="restore-row">
+          <div><strong>恢复托管地址</strong><small>补回当前接口上缺失的地址</small></div>
+          <button class="button button-quiet" id="restore" type="button">立即恢复</button>
+        </div>
+      </div>
+
+      <div class="managed-panel">
+        <div class="section-title section-title-row">
+          <div><p class="eyebrow">PERSISTENT</p><h2>托管地址</h2></div>
+          <span class="table-count" id="table-count">0</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>IPv6 地址</th><th>接口</th><th>创建时间</th><th><span class="sr-only">操作</span></th></tr></thead>
+            <tbody id="managed-rows"><tr><td class="empty" colspan="4">正在读取状态…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="interfaces-panel">
+      <div class="section-title section-title-row">
+        <div><p class="eyebrow">LIVE NETWORK</p><h2>接口与当前地址</h2></div>
+        <span class="muted" id="interface-count">-- 个接口</span>
+      </div>
+      <div id="interface-list" class="interface-list"><div class="empty-block">正在读取接口…</div></div>
+    </section>
+    <footer><span>状态仅记录地址与路由元数据</span><span>API 仅通过本地 Unix Socket 提供</span></footer>
+  </main>
+</body>
+</html>
