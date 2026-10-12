@@ -3,6 +3,7 @@ const managedRows = byId("managed-rows");
 const interfaceList = byId("interface-list");
 const notice = byId("notice");
 let currentState;
+const probeResults = new Map();
 
 function node(tag, className, text) {
   const element = document.createElement(tag);
@@ -38,6 +39,17 @@ function managedKey(iface, prefix) {
   return `${iface}|${prefix}`;
 }
 
+function renderProbe(item) {
+  const result = probeResults.get(managedKey(item.interface, item.prefix));
+  if (!result) return node("span", "probe-status", "未检测");
+  const status = result.http_ok ? "通过" : result.tcp_ok ? "仅 TCP 可达" : "失败";
+  const kind = result.http_ok ? "ok" : result.tcp_ok ? "partial" : "failed";
+  const detail = result.error || `${result.http_status ? `HTTP ${result.http_status} · ` : ""}${result.latency_ms} ms`;
+  const badge = node("span", `probe-status ${kind}`, status);
+  badge.title = detail;
+  return badge;
+}
+
 function renderManaged(state) {
   const rows = state.addresses || [];
   byId("managed-count").textContent = String(rows.length);
@@ -46,7 +58,7 @@ function renderManaged(state) {
   if (!rows.length) {
     const row = node("tr");
     const cell = node("td", "empty", "还没有托管地址");
-    cell.colSpan = 4;
+    cell.colSpan = 5;
     row.append(cell);
     managedRows.append(row);
     return;
@@ -56,6 +68,9 @@ function renderManaged(state) {
     row.append(node("td", "", item.prefix));
     row.append(node("td", "", item.interface));
     row.append(node("td", "", new Date(item.created_at).toLocaleString()));
+    const probeCell = node("td");
+    probeCell.append(renderProbe(item));
+    row.append(probeCell);
     const actionCell = node("td");
     const button = node("button", "button button-remove", "删除");
     button.type = "button";
@@ -194,6 +209,22 @@ byId("add-form").addEventListener("submit", async (event) => {
 
 byId("interface").addEventListener("change", () => updatePrefixHint());
 byId("refresh").addEventListener("click", refresh);
+byId("probe").addEventListener("click", async () => {
+  const button = byId("probe");
+  button.disabled = true;
+  setNotice("正在从每个托管地址发起 IPv6 出站检测…");
+  try {
+    const result = await request("/v1/probes", { method: "POST" });
+    for (const item of result.results || []) probeResults.set(managedKey(item.interface, item.prefix), item);
+    renderManaged(currentState?.state || {});
+    const partial = result.tcp_only || 0;
+    setNotice(`检测完成：${result.passed || 0} 个通过，${partial} 个仅 TCP 可达，${result.failed || 0} 个失败。`, result.failed ? "error" : "success");
+  } catch (error) {
+    setNotice(`检测失败：${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
 byId("restore").addEventListener("click", async () => {
   const button = byId("restore");
   button.disabled = true;

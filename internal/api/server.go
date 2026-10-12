@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -13,8 +14,10 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/csy6666/ccore-ipv6/internal/ipv6"
+	"github.com/csy6666/ccore-ipv6/internal/probe"
 )
 
 //go:embed panel/index.html panel/app.js panel/style.css panel/favicon.svg
@@ -46,6 +49,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/state", s.state)
 	mux.HandleFunc("POST /v1/addresses", s.addAddresses)
 	mux.HandleFunc("DELETE /v1/addresses", s.removeAddress)
+	mux.HandleFunc("POST /v1/probes", s.probes)
 	mux.HandleFunc("POST /v1/restore", s.restore)
 	panel, err := fs.Sub(panelFiles, "panel")
 	if err == nil {
@@ -241,6 +245,78 @@ func (s *Service) removeAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type probeResponse struct {
+	Results []probe.Result `json:"results"`
+	Passed  int            `json:"passed"`
+	TCPOnly int            `json:"tcp_only"`
+	Failed  int            `json:"failed"`
+}
+
+func (s *Service) probes(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	state, err := ipv6.LoadState(s.statePath)
+	s.mu.Unlock()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if len(state.Addresses) == 0 {
+		writeError(w, http.StatusBadRequest, errors.New("state has no managed addresses"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	results := make([]probe.Result, len(state.Addresses))
+	workers := 4
+	if len(results) < workers {
+		workers = len(results)
+	}
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				item := state.Addresses[index]
+				prefix, parseErr := ipv6.ParsePrefix(item.Prefix, 64)
+				if parseErr != nil {
+					results[index] = probe.Result{
+						Interface: item.Interface,
+						Prefix:    item.Prefix,
+						CheckedAt: time.Now().UTC(),
+						Error:     parseErr.Error(),
+					}
+					continue
+				}
+				results[index] = probe.Run(ctx, item.Interface, item.Prefix, prefix.Addr())
+			}
+		}()
+	}
+sendJobs:
+	for index := range state.Addresses {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			break sendJobs
+		}
+	}
+	close(jobs)
+	wg.Wait()
+	response := probeResponse{Results: results}
+	for _, result := range results {
+		switch {
+		case result.HTTP:
+			response.Passed++
+		case result.TCP:
+			response.TCPOnly++
+		default:
+			response.Failed++
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

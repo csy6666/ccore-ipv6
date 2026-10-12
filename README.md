@@ -14,6 +14,7 @@
 - 使用 Cloudflare API Token 将状态里的地址同步为 AAAA 记录
 - Cloudflare 临时失败和限流会自动退避重试
 - 通过 Unix socket 提供本地状态查询和幂等恢复 API
+- 从每个托管地址发起绑定源地址的 TCP/HTTPS 出站可用性检测
 
 当前版本不负责代理协议或 C-Panel。Cloudflare 凭据只从环境变量读取，不写入状态文件。
 
@@ -80,6 +81,7 @@ Cloudflare 同步只创建缺少的 AAAA 记录，不删除已有记录；这样
 - `GET /v1/state`
 - `POST /v1/addresses`
 - `DELETE /v1/addresses`
+- `POST /v1/probes`（对所有托管地址做一次性出站探测，不写入状态文件）
 - `POST /v1/restore`
 
 可直接参考 [systemd/ccore-ipv6.service](systemd/ccore-ipv6.service)。服务启动前会等待 `network-online.target` 并恢复状态文件中的地址和默认路由；恢复失败时服务启动失败，systemd 会按重启策略重试。unit 只授予 `CAP_NET_ADMIN`，不以 root 运行。

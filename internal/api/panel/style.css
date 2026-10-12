@@ -69,6 +69,7 @@ input[type="number"] { max-width: 92px; font-variant-numeric: tabular-nums; }
 .managed-panel, .interfaces-panel { min-width: 0; }
 .managed-panel { border-left: 1px solid var(--line); padding-left: 28px; }
 .section-title-row { margin-bottom: 9px; }
+.section-actions { display: inline-flex; align-items: center; gap: 9px; }
 .table-count { display: inline-grid; min-width: 25px; height: 25px; padding: 0 6px; place-items: center; color: var(--teal-dark); background: #e0f1f1; border: 1px solid #bfe0e1; border-radius: 13px; font-size: 11px; font-weight: 700; }
 .table-wrap { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; text-align: left; }
@@ -79,6 +80,10 @@ td:last-child, th:last-child { text-align: right; }
 .empty { padding: 30px 9px; color: #778b92; text-align: center !important; font-family: inherit !important; white-space: normal !important; }
 .button-remove { min-height: 29px; padding: 0 9px; background: #fff; border-color: #e4c6c3; color: var(--red); }
 .button-remove:hover { background: #fff4f2; border-color: #dca7a1; }
+.probe-status { color: #71848a; font-size: 10px; white-space: nowrap; }
+.probe-status.ok { color: var(--green); }
+.probe-status.partial { color: #9a6a19; }
+.probe-status.failed { color: var(--red); }
 .interfaces-panel { padding-top: 22px; margin-top: 22px; border-top: 1px solid var(--line); }
 .muted { color: var(--muted); font-size: 11px; }
 .interface-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
