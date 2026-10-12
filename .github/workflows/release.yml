@@ -38,9 +38,9 @@ jobs:
             -o dist/${VERSION}/ccore-ipv6 ./cmd/ccore-ipv6
           cp install.sh dist/${VERSION}/
           mkdir -p dist/${VERSION}/systemd
-          cp systemd/ccore-ipv6.service dist/${VERSION}/systemd/
+          cp systemd/ccore-ipv6.service systemd/ccore-ipv6-health.service systemd/ccore-ipv6-health.timer dist/${VERSION}/systemd/
           chmod 755 dist/${VERSION}/install.sh dist/${VERSION}/ccore-ipv6
-          tar -C dist/${VERSION} -czf "dist/ccore-ipv6-${VERSION}-linux-${{ matrix.arch }}.tar.gz" ccore-ipv6 install.sh systemd/ccore-ipv6.service
+          tar -C dist/${VERSION} -czf "dist/ccore-ipv6-${VERSION}-linux-${{ matrix.arch }}.tar.gz" ccore-ipv6 install.sh systemd/ccore-ipv6.service systemd/ccore-ipv6-health.service systemd/ccore-ipv6-health.timer
       - uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.arch }}

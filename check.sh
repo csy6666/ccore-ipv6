@@ -46,6 +46,13 @@ if command -v ccore-ipv6 >/dev/null 2>&1; then
     echo "ccore-ipv6.service: inactive"
     fail=1
   fi
+  if systemctl is-enabled --quiet ccore-ipv6-health.timer; then
+    echo "ccore-ipv6-health.timer: enabled"
+  else
+    echo "ccore-ipv6-health.timer: disabled"
+    fail=1
+  fi
+  ccore-ipv6 health || fail=1
 else
   echo "missing: ccore-ipv6"
   fail=1

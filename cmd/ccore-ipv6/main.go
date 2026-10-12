@@ -45,6 +45,8 @@ func main() {
 		err = routeSourceCommand(os.Args[2:])
 	case "serve":
 		err = serveCommand(os.Args[2:])
+	case "health":
+		err = healthCommand(os.Args[2:])
 	case "dns-zones":
 		err = dnsZonesCommand(os.Args[2:])
 	case "dns-sync":
@@ -75,6 +77,7 @@ func usage() {
   ccore-ipv6 route-source --iface <name> --source <ipv6> [--gateway <ipv6>]
   ccore-ipv6 restore [--state <path>]
   ccore-ipv6 serve [--socket /run/ccore-ipv6/ccore-ipv6.sock] [--state <path>]
+  ccore-ipv6 health [--state <path>]
   ccore-ipv6 dns-zones
   ccore-ipv6 dns-sync --zone-id <id> --zone-name <name> --name <template>
 
@@ -187,6 +190,69 @@ func listCommand(args []string) error {
 			fmt.Printf("  %s/%d scope=%s permanent=%t\n", addr.Addr, addr.PrefixLen, addr.Scope, addr.Permanent)
 		}
 	}
+	return nil
+}
+
+func healthCommand(args []string) error {
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	statePath := fs.String("state", defaultState, "state file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	state, err := ipv6.LoadState(*statePath)
+	if err != nil {
+		return err
+	}
+	interfaces, err := ipv6.NewManager().List()
+	if err != nil {
+		return err
+	}
+	byName := make(map[string]ipv6.Interface, len(interfaces))
+	for _, item := range interfaces {
+		byName[item.Name] = item
+	}
+	failures := 0
+	for _, managed := range state.Addresses {
+		prefix, parseErr := ipv6.ParsePrefix(managed.Prefix, 64)
+		if parseErr != nil {
+			fmt.Printf("FAIL address %s/%s: %v\n", managed.Interface, managed.Prefix, parseErr)
+			failures++
+			continue
+		}
+		item, ok := byName[managed.Interface]
+		present := false
+		for _, address := range item.Addresses {
+			if address.Addr == prefix.Addr() {
+				present = true
+				break
+			}
+		}
+		if !ok || !item.Up || !present {
+			fmt.Printf("FAIL address %s/%s: interface or address is missing\n", managed.Interface, managed.Prefix)
+			failures++
+			continue
+		}
+		fmt.Printf("PASS address %s/%s\n", managed.Interface, managed.Prefix)
+	}
+	for interfaceName, route := range state.DefaultRoutes {
+		item, ok := byName[interfaceName]
+		if !ok || item.Route == nil {
+			fmt.Printf("FAIL route %s: default route is missing\n", interfaceName)
+			failures++
+			continue
+		}
+		if route.Source == "" || item.Route.Source.String() != route.Source {
+			fmt.Printf("FAIL route %s: source state=%s live=%s\n", interfaceName, route.Source, item.Route.Source)
+			failures++
+			continue
+		}
+		fmt.Printf("PASS route %s source=%s\n", interfaceName, route.Source)
+	}
+	if failures > 0 {
+		return fmt.Errorf("health check failed: %d issue(s)", failures)
+	}
+	fmt.Printf("health=PASS addresses=%d routes=%d\n", len(state.Addresses), len(state.DefaultRoutes))
 	return nil
 }
 

@@ -72,6 +72,7 @@ ccore-ipv6 remove --iface eth0 2001:db8:1::1234/64
 ccore-ipv6 route-source --iface eth0 --source 2001:db8:1::1234
 ccore-ipv6 restore
 ccore-ipv6 serve --socket /run/ccore-ipv6/ccore-ipv6.sock
+ccore-ipv6 health
 CCORE_IPV6_CF_TOKEN='***' ccore-ipv6 dns-zones
 CCORE_IPV6_CF_TOKEN='***' ccore-ipv6 dns-sync \
   --zone-id <zone-id> --zone-name example.com --name 'node-{n}'
@@ -113,7 +114,7 @@ Cloudflare 同步只创建缺少的 AAAA 记录，不删除已有记录；这样
 - `POST /v1/dns/sync`（只创建缺失的 AAAA 记录）
 - `POST /v1/restore`
 
-可直接参考 [systemd/ccore-ipv6.service](systemd/ccore-ipv6.service)。服务启动前会等待 `network-online.target` 并恢复状态文件中的地址和默认路由；恢复失败时服务启动失败，systemd 会按重启策略重试。unit 只授予 `CAP_NET_ADMIN`，不以 root 运行。
+可直接参考 [systemd/ccore-ipv6.service](systemd/ccore-ipv6.service)。服务启动前会等待 `network-online.target` 并恢复状态文件中的地址和默认路由；恢复失败时服务启动失败，systemd 会按重启策略重试。unit 只授予 `CAP_NET_ADMIN`，不以 root 运行。安装时还会启用 `ccore-ipv6-health.timer`，每 5 分钟检查托管地址、接口和受管默认路由的一致性；健康检查只报告问题，不会自动修改地址或路由。
 
 ```bash
 useradd --system --no-create-home --shell /usr/sbin/nologin ccore-ipv6

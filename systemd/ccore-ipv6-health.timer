@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic ccore-ipv6 managed state health check
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=ccore-ipv6-health.service
+
+[Install]
+WantedBy=timers.target

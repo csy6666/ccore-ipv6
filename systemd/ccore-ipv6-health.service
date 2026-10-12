@@ -1,0 +1,21 @@
+[Unit]
+Description=ccore-ipv6 managed state health check
+After=network-online.target ccore-ipv6.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ccore-ipv6
+Group=ccore-ipv6
+ExecStart=/usr/local/bin/ccore-ipv6 health --state /var/lib/ccore-ipv6/state.json
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+ReadWritePaths=/run/ccore-ipv6 /var/lib/ccore-ipv6
