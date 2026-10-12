@@ -82,6 +82,7 @@ Cloudflare 同步只创建缺少的 AAAA 记录，不删除已有记录；这样
 - `POST /v1/addresses`
 - `DELETE /v1/addresses`
 - `POST /v1/probes`（对所有托管地址做一次性出站探测，不写入状态文件）
+- `POST /v1/routes/source`（切换托管地址为默认路由源，空源地址恢复内核自动选择）
 - `POST /v1/restore`
 
 可直接参考 [systemd/ccore-ipv6.service](systemd/ccore-ipv6.service)。服务启动前会等待 `network-online.target` 并恢复状态文件中的地址和默认路由；恢复失败时服务启动失败，systemd 会按重启策略重试。unit 只授予 `CAP_NET_ADMIN`，不以 root 运行。

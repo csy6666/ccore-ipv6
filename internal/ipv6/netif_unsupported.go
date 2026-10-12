@@ -18,3 +18,4 @@ func (unsupportedManager) Delete(string, netip.Prefix) error { return ErrUnsuppo
 func (unsupportedManager) SetDefaultRoute(string, netip.Addr, netip.Addr, bool) error {
 	return ErrUnsupported
 }
+func (unsupportedManager) ClearDefaultRoute(string) error { return ErrUnsupported }

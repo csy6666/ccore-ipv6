@@ -60,6 +60,7 @@ type Manager interface {
 	Add(interfaceName string, prefix netip.Prefix) error
 	Delete(interfaceName string, prefix netip.Prefix) error
 	SetDefaultRoute(interfaceName string, gateway, source netip.Addr, onLink bool) error
+	ClearDefaultRoute(interfaceName string) error
 }
 
 func ParsePrefix(raw string, defaultBits int) (netip.Prefix, error) {

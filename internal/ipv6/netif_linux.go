@@ -207,3 +207,32 @@ func (LinuxManager) SetDefaultRoute(name string, gateway, source netip.Addr, onL
 	}
 	return nil
 }
+
+func (LinuxManager) ClearDefaultRoute(name string) error {
+	link, err := linkByName(name)
+	if err != nil {
+		return err
+	}
+	current := defaultRoute(link.Attrs().Index)
+	if current == nil {
+		return errors.New("no IPv6 default route found")
+	}
+	if !current.Gateway.IsValid() && link.Attrs().Flags&net.FlagPointToPoint == 0 {
+		return errors.New("default route has no gateway; refusing to replace it automatically")
+	}
+	route := &netlink.Route{
+		LinkIndex: link.Attrs().Index,
+		Dst:       &net.IPNet{IP: net.IPv6zero, Mask: net.CIDRMask(0, 128)},
+		Family:    netlink.FAMILY_V6,
+	}
+	if current.Gateway.IsValid() {
+		route.Gw = net.IP(current.Gateway.AsSlice())
+		if current.OnLink {
+			route.Flags = int(unix.RTNH_F_ONLINK)
+		}
+	}
+	if err := netlink.RouteReplace(route); err != nil {
+		return fmt.Errorf("clear IPv6 default route source: %w", err)
+	}
+	return nil
+}

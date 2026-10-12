@@ -66,6 +66,12 @@ input[type="number"] { max-width: 92px; font-variant-numeric: tabular-nums; }
 .restore-row strong, .restore-row small { display: block; }
 .restore-row strong { margin-bottom: 4px; font-size: 12px; }
 .restore-row small { color: var(--muted); font-size: 10px; line-height: 14px; }
+.route-panel { padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line); }
+.route-heading { margin-bottom: 10px; }
+.route-heading strong, .route-heading small { display: block; }
+.route-heading strong { margin-bottom: 4px; font-size: 12px; }
+.route-heading small { color: var(--muted); font-size: 10px; line-height: 14px; }
+.route-button { width: 100%; margin-top: 6px; }
 .managed-panel, .interfaces-panel { min-width: 0; }
 .managed-panel { border-left: 1px solid var(--line); padding-left: 28px; }
 .section-title-row { margin-bottom: 9px; }

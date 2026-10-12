@@ -50,6 +50,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/addresses", s.addAddresses)
 	mux.HandleFunc("DELETE /v1/addresses", s.removeAddress)
 	mux.HandleFunc("POST /v1/probes", s.probes)
+	mux.HandleFunc("POST /v1/routes/source", s.setRouteSource)
 	mux.HandleFunc("POST /v1/restore", s.restore)
 	panel, err := fs.Sub(panelFiles, "panel")
 	if err == nil {
@@ -317,6 +318,122 @@ sendJobs:
 		}
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+type routeSourceRequest struct {
+	Interface string `json:"interface"`
+	Source    string `json:"source"`
+}
+
+type routeSourceResponse struct {
+	Interface string      `json:"interface"`
+	Mode      string      `json:"mode"`
+	Route     *ipv6.Route `json:"route,omitempty"`
+}
+
+func (s *Service) setRouteSource(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var request routeSourceRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	request.Interface = strings.TrimSpace(request.Interface)
+	if request.Interface == "" {
+		writeError(w, http.StatusBadRequest, errors.New("interface is required"))
+		return
+	}
+	interfaces, err := s.manager.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	var selected *ipv6.Interface
+	for index := range interfaces {
+		if interfaces[index].Name == request.Interface {
+			selected = &interfaces[index]
+			break
+		}
+	}
+	if selected == nil || !selected.Up {
+		writeError(w, http.StatusBadRequest, errors.New("interface was not found or is down"))
+		return
+	}
+	if selected.Route == nil {
+		writeError(w, http.StatusBadRequest, errors.New("interface has no IPv6 default route"))
+		return
+	}
+	state, err := ipv6.LoadState(s.statePath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	sourceRaw := strings.TrimSpace(request.Source)
+	if sourceRaw == "" {
+		if _, managedRoute := state.DefaultRoutes[request.Interface]; !managedRoute {
+			writeError(w, http.StatusForbidden, errors.New("default route is not managed by ccore-ipv6"))
+			return
+		}
+		if err := s.manager.ClearDefaultRoute(request.Interface); err != nil {
+			writeError(w, http.StatusConflict, err)
+			return
+		}
+		delete(state.DefaultRoutes, request.Interface)
+		if err := ipv6.SaveState(s.statePath, state); err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Errorf("route changed but state save failed: %w", err))
+			return
+		}
+		writeJSON(w, http.StatusOK, routeSourceResponse{Interface: request.Interface, Mode: "automatic", Route: selected.Route})
+		return
+	}
+	source, err := netip.ParseAddr(sourceRaw)
+	if err != nil || !source.Is6() || source.Is4In6() {
+		writeError(w, http.StatusBadRequest, errors.New("source must be a valid IPv6 address"))
+		return
+	}
+	managed := false
+	for _, item := range state.Addresses {
+		prefix, parseErr := ipv6.ParsePrefix(item.Prefix, 64)
+		if parseErr == nil && item.Interface == request.Interface && prefix.Addr() == source {
+			managed = true
+			break
+		}
+	}
+	if !managed {
+		writeError(w, http.StatusForbidden, errors.New("source address is not managed by ccore-ipv6"))
+		return
+	}
+	present := false
+	for _, item := range selected.Addresses {
+		if item.Addr == source {
+			present = true
+			break
+		}
+	}
+	if !present {
+		writeError(w, http.StatusConflict, errors.New("source address is not present on the selected interface"))
+		return
+	}
+	if err := s.manager.SetDefaultRoute(request.Interface, selected.Route.Gateway, source, selected.Route.OnLink); err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	if state.DefaultRoutes == nil {
+		state.DefaultRoutes = map[string]ipv6.ManagedRoute{}
+	}
+	managedRoute := ipv6.ManagedRoute{Source: source.String(), OnLink: selected.Route.OnLink}
+	if selected.Route.Gateway.IsValid() {
+		managedRoute.Gateway = selected.Route.Gateway.String()
+	}
+	state.DefaultRoutes[request.Interface] = managedRoute
+	if err := ipv6.SaveState(s.statePath, state); err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Errorf("route changed but state save failed: %w", err))
+		return
+	}
+	updatedRoute := *selected.Route
+	updatedRoute.Source = source
+	writeJSON(w, http.StatusOK, routeSourceResponse{Interface: request.Interface, Mode: "managed", Route: &updatedRoute})
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

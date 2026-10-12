@@ -95,6 +95,41 @@ function fillInterfaces(interfaces) {
   if (usable.some((item) => item.name === previous)) select.value = previous;
   else if (usable.some((item) => item.route)) select.value = usable.find((item) => item.route).name;
   updatePrefixHint(usable);
+  fillRouteInterfaces(interfaces);
+}
+
+function fillRouteInterfaces(interfaces) {
+  const select = byId("route-interface");
+  const previous = select.value;
+  const usable = interfaces.filter((item) => item.up && item.route);
+  select.replaceChildren();
+  for (const item of usable) {
+    const option = node("option", "", item.name);
+    option.value = item.name;
+    select.append(option);
+  }
+  if (usable.some((item) => item.name === previous)) select.value = previous;
+  else if (usable.length) select.value = usable[0].name;
+  updateRouteSources(interfaces);
+}
+
+function updateRouteSources(interfaces = currentState?.interfaces || []) {
+  const iface = interfaces.find((item) => item.name === byId("route-interface").value);
+  const select = byId("route-source");
+  const previous = select.value;
+  select.replaceChildren();
+  const automatic = node("option", "", "由内核自动选择");
+  automatic.value = "";
+  select.append(automatic);
+  const managed = new Set((currentState?.state?.addresses || []).filter((item) => item.interface === iface?.name).map((item) => item.prefix.split("/")[0]));
+  for (const address of iface?.addresses || []) {
+    if (address.scope !== "global" || !managed.has(address.addr)) continue;
+    const option = node("option", "", address.addr);
+    option.value = address.addr;
+    select.append(option);
+  }
+  const current = iface?.route?.source || "";
+  select.value = Array.from(select.options).some((option) => option.value === current) ? current : (Array.from(select.options).some((option) => option.value === previous) ? previous : "");
 }
 
 function updatePrefixHint(interfaces = currentState?.interfaces || []) {
@@ -208,6 +243,7 @@ byId("add-form").addEventListener("submit", async (event) => {
 });
 
 byId("interface").addEventListener("change", () => updatePrefixHint());
+byId("route-interface").addEventListener("change", () => updateRouteSources());
 byId("refresh").addEventListener("click", refresh);
 byId("probe").addEventListener("click", async () => {
   const button = byId("probe");
@@ -221,6 +257,28 @@ byId("probe").addEventListener("click", async () => {
     setNotice(`检测完成：${result.passed || 0} 个通过，${partial} 个仅 TCP 可达，${result.failed || 0} 个失败。`, result.failed ? "error" : "success");
   } catch (error) {
     setNotice(`检测失败：${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+byId("route-submit").addEventListener("click", async () => {
+  const button = byId("route-submit");
+  const iface = byId("route-interface").value;
+  if (!iface) {
+    setNotice("没有检测到带 IPv6 默认路由的接口。", "error");
+    return;
+  }
+  button.disabled = true;
+  setNotice("正在应用默认路由源地址…");
+  try {
+    await request("/v1/routes/source", {
+      method: "POST",
+      body: JSON.stringify({ interface: iface, source: byId("route-source").value }),
+    });
+    setNotice("默认路由源地址已更新。", "success");
+    await refresh();
+  } catch (error) {
+    setNotice(`路由更新失败：${error.message}`, "error");
   } finally {
     button.disabled = false;
   }

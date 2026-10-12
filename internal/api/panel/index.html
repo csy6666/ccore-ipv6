@@ -62,6 +62,14 @@
           <div><strong>恢复托管地址</strong><small>补回当前接口上缺失的地址</small></div>
           <button class="button button-quiet" id="restore" type="button">立即恢复</button>
         </div>
+        <div class="route-panel">
+          <div class="route-heading"><strong>默认路由源地址</strong><small>切换出站源地址，或恢复内核自动选择</small></div>
+          <label for="route-interface">网络接口</label>
+          <select id="route-interface" required></select>
+          <label for="route-source">源地址</label>
+          <select id="route-source"><option value="">由内核自动选择</option></select>
+          <button class="button button-quiet route-button" id="route-submit" type="button">应用路由设置</button>
+        </div>
       </div>
 
       <div class="managed-panel">
