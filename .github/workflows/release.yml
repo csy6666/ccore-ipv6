@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            goarch: amd64
+          - arch: arm64
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+      - name: Build package
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/${VERSION}"
+          CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" go build -trimpath -buildvcs=false \
+            -ldflags "-s -w -X github.com/csy6666/ccore-ipv6/internal/version.Version=${VERSION} -X github.com/csy6666/ccore-ipv6/internal/version.Commit=${GITHUB_SHA} -X github.com/csy6666/ccore-ipv6/internal/version.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o dist/${VERSION}/ccore-ipv6 ./cmd/ccore-ipv6
+          cp install.sh dist/${VERSION}/
+          mkdir -p dist/${VERSION}/systemd
+          cp systemd/ccore-ipv6.service dist/${VERSION}/systemd/
+          chmod 755 dist/${VERSION}/install.sh dist/${VERSION}/ccore-ipv6
+          tar -C dist/${VERSION} -czf "dist/ccore-ipv6-${VERSION}-linux-${{ matrix.arch }}.tar.gz" ccore-ipv6 install.sh systemd/ccore-ipv6.service
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.arch }}
+          path: dist/ccore-ipv6-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          merge-multiple: true
+          path: dist
+      - name: Checksums
+        run: cd dist && sha256sum ccore-ipv6-*.tar.gz | sort -k2 > SHA256SUMS
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

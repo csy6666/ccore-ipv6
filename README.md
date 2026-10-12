@@ -33,6 +33,23 @@ Linux VPS 上可以直接使用项目目录中的安装脚本：
 
 `install.sh update` 会替换二进制并重启 unit；`uninstall` 保留状态目录，`purge` 才会删除状态。
 
+## 一键安装
+
+最新稳定版（支持 Linux amd64 和 arm64）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/csy6666/ccore-ipv6/main/install-online.sh -o /tmp/ccore-ipv6-install.sh
+sudo bash /tmp/ccore-ipv6-install.sh
+```
+
+指定版本：
+
+```bash
+sudo bash /tmp/ccore-ipv6-install.sh v0.1.0
+```
+
+安装脚本会下载 GitHub Release 压缩包并校验 `SHA256SUMS`，然后安装 systemd 服务。运行前可以先查看脚本内容。源码提交不自动触发正式发布，只有推送 `v*.*.*` 标签才会构建并创建 Release。
+
 ## Web 面板
 
 服务在同一个 Unix Socket 上提供嵌入式面板和 JSON API，不新增 TCP 或公网监听。通过 SSH Unix-socket 转发访问：

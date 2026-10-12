@@ -19,6 +19,7 @@ import (
 	"github.com/csy6666/ccore-ipv6/internal/api"
 	"github.com/csy6666/ccore-ipv6/internal/dns/cloudflare"
 	"github.com/csy6666/ccore-ipv6/internal/ipv6"
+	"github.com/csy6666/ccore-ipv6/internal/version"
 )
 
 const defaultState = "/var/lib/ccore-ipv6/state.json"
@@ -49,7 +50,7 @@ func main() {
 	case "dns-sync":
 		err = dnsSyncCommand(os.Args[2:])
 	case "version":
-		fmt.Printf("ccore-ipv6 dev %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("ccore-ipv6 %s (%s/%s) commit=%s built=%s\n", version.Version, runtime.GOOS, runtime.GOARCH, version.Commit, version.Date)
 		return
 	case "help", "-h", "--help":
 		usage()
