@@ -12,10 +12,12 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/csy6666/ccore-ipv6/internal/dns/cloudflare"
 	"github.com/csy6666/ccore-ipv6/internal/ipv6"
 	"github.com/csy6666/ccore-ipv6/internal/probe"
 )
@@ -51,6 +53,9 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/addresses", s.removeAddress)
 	mux.HandleFunc("POST /v1/probes", s.probes)
 	mux.HandleFunc("POST /v1/routes/source", s.setRouteSource)
+	mux.HandleFunc("GET /v1/dns/zones", s.dnsZones)
+	mux.HandleFunc("POST /v1/dns/preview", s.dnsPreview)
+	mux.HandleFunc("POST /v1/dns/sync", s.dnsSync)
 	mux.HandleFunc("POST /v1/restore", s.restore)
 	panel, err := fs.Sub(panelFiles, "panel")
 	if err == nil {
@@ -81,6 +86,27 @@ type addAddressesRequest struct {
 	Interface string `json:"interface"`
 	Prefix    string `json:"prefix"`
 	Count     int    `json:"count"`
+}
+
+type dnsSyncRequest struct {
+	ZoneID   string `json:"zone_id"`
+	ZoneName string `json:"zone_name"`
+	Name     string `json:"name"`
+	TTL      int    `json:"ttl"`
+	Proxied  bool   `json:"proxied"`
+}
+
+type dnsPreviewItem struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	Exists  bool   `json:"exists"`
+}
+
+type dnsPreviewResponse struct {
+	Zone     cloudflare.Zone  `json:"zone"`
+	Items    []dnsPreviewItem `json:"items"`
+	Missing  int              `json:"missing"`
+	Existing int              `json:"existing"`
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
@@ -246,6 +272,162 @@ func (s *Service) removeAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func cloudflareClient() (*cloudflare.Client, error) {
+	return cloudflare.New(strings.TrimSpace(os.Getenv("CCORE_IPV6_CF_TOKEN")))
+}
+
+func (s *Service) dnsZones(w http.ResponseWriter, r *http.Request) {
+	client, err := cloudflareClient()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	zones, err := client.ListZones(ctx)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"zones": zones})
+}
+
+func (s *Service) dnsPreview(w http.ResponseWriter, r *http.Request) {
+	request, _, zone, names, addresses, err := s.prepareDNS(w, r)
+	if err != nil {
+		writeError(w, dnsErrorStatus(err), err)
+		return
+	}
+	client, err := cloudflareClient()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	existing, err := client.ListAAAA(ctx, zone.ID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	have := make(map[string]struct{}, len(existing))
+	for _, record := range existing {
+		have[dnsRecordKey(record.Name, record.Content)] = struct{}{}
+	}
+	items := make([]dnsPreviewItem, 0, len(names))
+	response := dnsPreviewResponse{Zone: zone, Items: items}
+	for index, name := range names {
+		item := dnsPreviewItem{Name: name, Address: addresses[index].String()}
+		_, item.Exists = have[dnsRecordKey(name, item.Address)]
+		if item.Exists {
+			response.Existing++
+		} else {
+			response.Missing++
+		}
+		response.Items = append(response.Items, item)
+	}
+	_ = request
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Service) dnsSync(w http.ResponseWriter, r *http.Request) {
+	request, _, zone, names, addresses, err := s.prepareDNS(w, r)
+	if err != nil {
+		writeError(w, dnsErrorStatus(err), err)
+		return
+	}
+	client, err := cloudflareClient()
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	result, err := client.SyncAAAA(ctx, zone.ID, names, addresses, request.TTL, request.Proxied)
+	response := map[string]any{
+		"zone":    zone,
+		"created": result.Created,
+		"skipped": result.Skipped,
+		"failed":  result.Failed,
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "created": result.Created, "skipped": result.Skipped, "failed": result.Failed})
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Service) prepareDNS(w http.ResponseWriter, r *http.Request) (dnsSyncRequest, ipv6.State, cloudflare.Zone, []string, []netip.Addr, error) {
+	var request dnsSyncRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		return request, ipv6.State{}, cloudflare.Zone{}, nil, nil, err
+	}
+	request.ZoneID = strings.TrimSpace(request.ZoneID)
+	request.ZoneName = strings.ToLower(strings.Trim(strings.TrimSpace(request.ZoneName), "."))
+	request.Name = strings.TrimSpace(request.Name)
+	if request.ZoneID == "" || request.ZoneName == "" {
+		return request, ipv6.State{}, cloudflare.Zone{}, nil, nil, errors.New("zone_id and zone_name are required")
+	}
+	if request.TTL <= 0 {
+		request.TTL = 60
+	}
+	if request.TTL > 86400 {
+		return request, ipv6.State{}, cloudflare.Zone{}, nil, nil, errors.New("ttl must be between 1 and 86400")
+	}
+	state, err := ipv6.LoadState(s.statePath)
+	if err != nil {
+		return request, state, cloudflare.Zone{}, nil, nil, err
+	}
+	if len(state.Addresses) == 0 {
+		return request, state, cloudflare.Zone{}, nil, nil, errors.New("state has no managed addresses")
+	}
+	addresses := make([]netip.Addr, 0, len(state.Addresses))
+	for _, item := range state.Addresses {
+		prefix, parseErr := ipv6.ParsePrefix(item.Prefix, 64)
+		if parseErr != nil {
+			return request, state, cloudflare.Zone{}, nil, nil, fmt.Errorf("state entry %s/%s: %w", item.Interface, item.Prefix, parseErr)
+		}
+		addresses = append(addresses, prefix.Addr())
+	}
+	names, err := cloudflare.ExpandNames(request.Name, request.ZoneName, len(addresses))
+	if err != nil {
+		return request, state, cloudflare.Zone{}, nil, nil, err
+	}
+	client, err := cloudflareClient()
+	if err != nil {
+		return request, state, cloudflare.Zone{}, nil, nil, err
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	zones, err := client.ListZones(ctx)
+	if err != nil {
+		return request, state, cloudflare.Zone{}, nil, nil, err
+	}
+	for _, zone := range zones {
+		if zone.ID == request.ZoneID && strings.EqualFold(strings.TrimSuffix(zone.Name, "."), request.ZoneName) {
+			return request, state, zone, names, addresses, nil
+		}
+	}
+	return request, state, cloudflare.Zone{}, nil, nil, errors.New("zone_id and zone_name do not match an accessible Cloudflare zone")
+}
+
+func dnsRecordKey(name, content string) string {
+	return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(name), ".")) + "|" + strings.ToLower(strings.TrimSpace(content))
+}
+
+func dnsErrorStatus(err error) int {
+	if strings.Contains(err.Error(), "Cloudflare") {
+		return http.StatusBadGateway
+	}
+	if strings.Contains(err.Error(), "token") {
+		return http.StatusServiceUnavailable
+	}
+	if strings.Contains(err.Error(), "state") {
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
 }
 
 type probeResponse struct {

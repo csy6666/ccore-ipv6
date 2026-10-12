@@ -132,6 +132,37 @@ function updateRouteSources(interfaces = currentState?.interfaces || []) {
   select.value = Array.from(select.options).some((option) => option.value === current) ? current : (Array.from(select.options).some((option) => option.value === previous) ? previous : "");
 }
 
+function selectedZone() {
+  const option = byId("dns-zone").selectedOptions[0];
+  return option?.value ? { id: option.value, name: option.dataset.name || "" } : null;
+}
+
+function dnsRequest() {
+  const zone = selectedZone();
+  if (!zone) throw new Error("请先加载并选择 Zone");
+  const name = byId("dns-name").value.trim();
+  if (!name) throw new Error("记录名模板不能为空");
+  return {
+    zone_id: zone.id,
+    zone_name: zone.name,
+    name,
+    ttl: Number(byId("dns-ttl").value),
+    proxied: byId("dns-proxied").checked,
+  };
+}
+
+function renderDNSPreview(result) {
+  const target = byId("dns-preview-result");
+  target.replaceChildren();
+  target.append(node("strong", "", `将创建 ${result.missing} 条，已有 ${result.existing} 条`));
+  for (const item of (result.items || []).slice(0, 12)) {
+    const line = node("div", "dns-preview-line", `${item.name} → ${item.address} · ${item.exists ? "已存在" : "待创建"}`);
+    target.append(line);
+  }
+  if ((result.items || []).length > 12) target.append(node("div", "muted", `还有 ${(result.items || []).length - 12} 条未展开`));
+  byId("dns-sync").disabled = result.missing === 0;
+}
+
 function updatePrefixHint(interfaces = currentState?.interfaces || []) {
   const selected = interfaces.find((item) => item.name === byId("interface").value);
   const globalAddress = selected?.addresses.find((address) => address.scope === "global");
@@ -281,6 +312,51 @@ byId("route-submit").addEventListener("click", async () => {
     setNotice(`路由更新失败：${error.message}`, "error");
   } finally {
     button.disabled = false;
+  }
+});
+byId("dns-load").addEventListener("click", async () => {
+  const button = byId("dns-load");
+  button.disabled = true;
+  try {
+    const result = await request("/v1/dns/zones");
+    const select = byId("dns-zone");
+    select.replaceChildren();
+    for (const zone of result.zones || []) {
+      const option = node("option", "", `${zone.name} · ${zone.status}`);
+      option.value = zone.id;
+      option.dataset.name = zone.name;
+      select.append(option);
+    }
+    setNotice(`${(result.zones || []).length} 个 Zone 已加载。`, "success");
+  } catch (error) {
+    setNotice(`加载 Zone 失败：${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+byId("dns-preview").addEventListener("click", async () => {
+  const button = byId("dns-preview");
+  button.disabled = true;
+  try {
+    const result = await request("/v1/dns/preview", { method: "POST", body: JSON.stringify(dnsRequest()) });
+    renderDNSPreview(result);
+    setNotice("DNS 预览已生成，请确认记录后再执行同步。", "success");
+  } catch (error) {
+    setNotice(`DNS 预览失败：${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+byId("dns-sync").addEventListener("click", async () => {
+  if (!window.confirm("确认创建预览中的缺失 AAAA 记录？已有记录不会删除。")) return;
+  const button = byId("dns-sync");
+  button.disabled = true;
+  try {
+    const result = await request("/v1/dns/sync", { method: "POST", body: JSON.stringify(dnsRequest()) });
+    setNotice(`DNS 同步完成：创建 ${result.created}，跳过 ${result.skipped}，失败 ${result.failed}。`, result.failed ? "error" : "success");
+    byId("dns-preview-result").textContent = "同步完成，请重新预览以查看最新状态。";
+  } catch (error) {
+    setNotice(`DNS 同步失败：${error.message}`, "error");
   }
 });
 byId("restore").addEventListener("click", async () => {

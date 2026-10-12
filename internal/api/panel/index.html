@@ -70,6 +70,20 @@
           <select id="route-source"><option value="">由内核自动选择</option></select>
           <button class="button button-quiet route-button" id="route-submit" type="button">应用路由设置</button>
         </div>
+        <div class="route-panel dns-panel">
+          <div class="route-heading"><strong>Cloudflare DNS 同步</strong><small>Token 只从服务端环境变量读取，面板不会保存凭据</small></div>
+          <label for="dns-zone">Zone</label>
+          <select id="dns-zone"><option value="">点击加载 Zone</option></select>
+          <label for="dns-name">记录名模板</label>
+          <input id="dns-name" type="text" value="node-{n}" placeholder="node-{n}" autocomplete="off" spellcheck="false">
+          <p class="field-hint">支持 {n}、{i} 和补零形式，例如 node-{n:3}。</p>
+          <div class="dns-options">
+            <label for="dns-ttl">TTL</label><input id="dns-ttl" type="number" min="1" max="86400" value="60">
+            <label class="checkbox-label"><input id="dns-proxied" type="checkbox"> Cloudflare 代理</label>
+          </div>
+          <div class="dns-actions"><button class="button button-quiet" id="dns-load" type="button">加载 Zone</button><button class="button button-quiet" id="dns-preview" type="button">预览</button><button class="button button-primary" id="dns-sync" type="button" disabled>执行同步</button></div>
+          <div class="dns-preview" id="dns-preview-result">尚未预览</div>
+        </div>
       </div>
 
       <div class="managed-panel">

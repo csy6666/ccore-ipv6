@@ -9,6 +9,7 @@ User=ccore-ipv6
 Group=ccore-ipv6
 ExecStartPre=/usr/local/bin/ccore-ipv6 restore --state /var/lib/ccore-ipv6/state.json
 ExecStart=/usr/local/bin/ccore-ipv6 serve --socket /run/ccore-ipv6/ccore-ipv6.sock --state /var/lib/ccore-ipv6/state.json
+EnvironmentFile=-/etc/ccore-ipv6/cloudflare.env
 Restart=on-failure
 RestartSec=3s
 AmbientCapabilities=CAP_NET_ADMIN

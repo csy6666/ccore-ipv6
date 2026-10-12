@@ -66,6 +66,14 @@ CCORE_IPV6_CF_TOKEN='***' ccore-ipv6 dns-sync \
 
 Cloudflare 认证只接受最小权限 API Token，环境变量为 `CCORE_IPV6_CF_TOKEN`。Token 只需要目标 Zone 的 DNS Edit 权限。本地模拟 API 可通过 `CCORE_IPV6_CF_ENDPOINT` 覆盖默认 API 地址。
 
+systemd 可选读取 `/etc/ccore-ipv6/cloudflare.env`，文件内容示例：
+
+```bash
+CCORE_IPV6_CF_TOKEN=替换为你的最小权限Token
+```
+
+该文件应保持 `root:ccore-ipv6` 和 `0640` 权限。面板不会接收或显示 Token；未配置 Token 时，DNS API 会返回配置缺失。
+
 状态文件只包含地址和路由元数据，不保存凭据，因此使用 `0644` 让专用 systemd 用户可以读取由 root CLI 写入的状态；状态锁仍保持 `0600`。
 
 Cloudflare 同步只创建缺少的 AAAA 记录，不删除已有记录；这样可以避免误删 Zone 中由其他系统管理的解析。`check.sh` 只做本机能力和状态预检，不代表公网 IPv6 入站或 DNS 生效已经验证。
@@ -83,6 +91,9 @@ Cloudflare 同步只创建缺少的 AAAA 记录，不删除已有记录；这样
 - `DELETE /v1/addresses`
 - `POST /v1/probes`（对所有托管地址做一次性出站探测，不写入状态文件）
 - `POST /v1/routes/source`（切换托管地址为默认路由源，空源地址恢复内核自动选择）
+- `GET /v1/dns/zones`（读取服务端 Token 可访问的 Zone）
+- `POST /v1/dns/preview`（预览缺失 AAAA 记录）
+- `POST /v1/dns/sync`（只创建缺失的 AAAA 记录）
 - `POST /v1/restore`
 
 可直接参考 [systemd/ccore-ipv6.service](systemd/ccore-ipv6.service)。服务启动前会等待 `network-online.target` 并恢复状态文件中的地址和默认路由；恢复失败时服务启动失败，systemd 会按重启策略重试。unit 只授予 `CAP_NET_ADMIN`，不以 root 运行。

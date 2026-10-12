@@ -28,6 +28,11 @@ install|update)
   install -m 755 ./ccore-ipv6 "$BIN"
   getent group "$USER_NAME" >/dev/null || groupadd --system "$USER_NAME"
   id "$USER_NAME" >/dev/null 2>&1 || useradd --system --gid "$USER_NAME" --no-create-home --shell /usr/sbin/nologin "$USER_NAME"
+  install -d -m 750 /etc/ccore-ipv6
+  if [ -f /etc/ccore-ipv6/cloudflare.env ]; then
+    chown root:"$USER_NAME" /etc/ccore-ipv6/cloudflare.env
+    chmod 640 /etc/ccore-ipv6/cloudflare.env
+  fi
   install -d -o "$USER_NAME" -g "$USER_NAME" -m 2750 "$STATE_DIR"
   if [ -f "$STATE_DIR/state.json" ]; then chmod 644 "$STATE_DIR/state.json"; fi
   if [ -f "$STATE_DIR/state.json.lock" ]; then chgrp "$USER_NAME" "$STATE_DIR/state.json.lock"; chmod 660 "$STATE_DIR/state.json.lock"; fi

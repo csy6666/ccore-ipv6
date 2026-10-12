@@ -72,6 +72,16 @@ input[type="number"] { max-width: 92px; font-variant-numeric: tabular-nums; }
 .route-heading strong { margin-bottom: 4px; font-size: 12px; }
 .route-heading small { color: var(--muted); font-size: 10px; line-height: 14px; }
 .route-button { width: 100%; margin-top: 6px; }
+.dns-options { display: grid; grid-template-columns: auto 86px 1fr; align-items: center; gap: 8px; }
+.dns-options label { margin: 0; }
+.dns-options input[type="number"] { max-width: none; }
+.checkbox-label { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.checkbox-label input { width: auto; min-height: auto; }
+.dns-actions { display: flex; gap: 7px; margin-top: 8px; }
+.dns-actions .button { flex: 1; padding: 0 7px; }
+.dns-preview { min-height: 30px; margin-top: 9px; padding: 8px; color: var(--muted); background: #f5f8f9; border: 1px solid #e2eaec; border-radius: 4px; font-size: 10px; line-height: 15px; overflow-wrap: anywhere; }
+.dns-preview strong { display: block; color: var(--ink); margin-bottom: 3px; }
+.dns-preview-line { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .managed-panel, .interfaces-panel { min-width: 0; }
 .managed-panel { border-left: 1px solid var(--line); padding-left: 28px; }
 .section-title-row { margin-bottom: 9px; }
